@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TaskFlow – Task Management</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--tx:#e2e8f0;--mut:#94a3b8;--pri:#3b82f6;--bd:#334155}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+button,input,select,textarea{font:inherit;color:var(--tx);background:#0f172a;border:1px solid var(--bd);border-radius:8px;padding:10px;width:100%}
+button{background:var(--pri);border:0;cursor:pointer;width:auto;padding:10px 16px;font-weight:600}
+button.g{background:transparent;border:1px solid var(--bd)}button.d{background:#dc2626}
+.wrap{max-width:1000px;margin:auto;padding:16px}
+.box{background:var(--card);border-radius:12px;padding:20px;margin-bottom:16px}
+.auth{max-width:380px;margin:10vh auto}.auth input{margin-bottom:10px}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+.stats div{background:var(--card);padding:14px;border-radius:12px;text-align:center}.stats b{font-size:1.6rem;display:block}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}.form .w{grid-column:1/-1}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.bar>*{flex:1;min-width:140px}
+.task{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-left:4px solid var(--pri);margin-bottom:10px}
+.task.high{border-color:#ef4444}.task.low{border-color:#22c55e}.task.medium{border-color:#f59e0b}
+.task.done h3{text-decoration:line-through;opacity:.6}.task h3{margin:0 0 4px}
+.meta{color:var(--mut);font-size:.85rem}.acts{display:flex;gap:6px;align-items:flex-start}.acts select{width:auto}
+.err{color:#f87171;min-height:20px}.hide{display:none}.late{color:#f87171}
+</style></head><body>
+<div id="auth" class="box auth">
+  <h2 id="at">Login to TaskFlow</h2>
+  <input id="name" class="hide" placeholder="Full name">
+  <input id="email" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (min 6)">
+  <div class="err" id="err"></div>
+  <button onclick="submitAuth()" style="width:100%" id="ab">Login</button>
+  <p class="meta" style="text-align:center"><a href="#" onclick="toggle()" style="color:var(--pri)" id="tg">New here? Register</a></p>
+</div>
+<div id="app" class="wrap hide">
+  <header><h2>📝 TaskFlow <span class="meta" id="who"></span></h2><button class="g" onclick="logout()">Logout</button></header>
+  <div class="stats"><div><b id="s1">0</b>To Do</div><div><b id="s2">0</b>In Progress</div><div><b id="s3">0</b>Done</div></div>
+  <div class="box"><h3 id="ft">Add Task</h3>
+    <div class="form">
+      <input id="title" class="w" placeholder="Task title"><textarea id="desc" class="w" rows="2" placeholder="Description"></textarea>
+      <select id="pri"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select>
+      <select id="sta"><option value="todo">To Do</option><option value="progress">In Progress</option><option value="done">Done</option></select>
+      <input id="due" type="date"><button onclick="save()" id="sb">Add Task</button>
+    </div></div>
+  <div class="bar"><input id="q" placeholder="Search..." oninput="render()">
+    <select id="fs" onchange="render()"><option value="">All status</option><option value="todo">To Do</option><option value="progress">In Progress</option><option value="done">Done</option></select>
+    <select id="fp" onchange="render()"><option value="">All priority</option><option>high</option><option>medium</option><option>low</option></select></div>
+  <div id="list"></div>
+</div>
+<script>
+let token=localStorage.token,user=JSON.parse(localStorage.user||'null'),tasks=[],editId=null,reg=false;
+const $=i=>document.getElementById(i);
+async function api(url,method='GET',body){
+  const r=await fetch(url,{method,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:body&&JSON.stringify(body)});
+  const d=await r.json();if(r.status===401&&token)logout();if(!r.ok)throw new Error(d.error);return d}
+function toggle(){reg=!reg;$('name').classList.toggle('hide',!reg);$('at').textContent=reg?'Create account':'Login to TaskFlow';
+  $('ab').textContent=reg?'Register':'Login';$('tg').textContent=reg?'Have an account? Login':'New here? Register';$('err').textContent=''}
+async function submitAuth(){try{
+  const d=await api(reg?'/api/register':'/api/login','POST',{name:$('name').value,email:$('email').value,password:$('pw').value});
+  token=d.token;user=d.user;localStorage.token=token;localStorage.user=JSON.stringify(user);start()}catch(e){$('err').textContent=e.message}}
+function logout(){localStorage.clear();token=null;location.reload()}
+async function start(){if(!token)return;$('auth').classList.add('hide');$('app').classList.remove('hide');
+  $('who').textContent=`— ${user.name} (${user.role})`;tasks=await api('/api/tasks');render()}
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function render(){
+  ['todo','progress','done'].forEach((s,i)=>$('s'+(i+1)).textContent=tasks.filter(t=>t.status===s).length);
+  const q=$('q').value.toLowerCase(),today=new Date().toISOString().slice(0,10);
+  const L=tasks.filter(t=>(!$('fs').value||t.status===$('fs').value)&&(!$('fp').value||t.priority===$('fp').value)&&(t.title+t.description).toLowerCase().includes(q));
+  $('list').innerHTML=L.length?L.map(t=>`<div class="box task ${t.priority} ${t.status==='done'?'done':''}">
+    <div><h3>${esc(t.title)}</h3><div>${esc(t.description)}</div>
+    <div class="meta">${t.priority} priority${t.due_date?` • <span class="${t.due_date<today&&t.status!=='done'?'late':''}">Due ${t.due_date}</span>`:''}${t.owner&&user.role==='admin'?` • by ${esc(t.owner)}`:''}</div></div>
+    <div class="acts"><select onchange="setStatus(${t.id},this.value)">${['todo','progress','done'].map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${{todo:'To Do',progress:'In Progress',done:'Done'}[s]}</option>`).join('')}</select>
+    <button class="g" onclick="edit(${t.id})">Edit</button><button class="d" onclick="del(${t.id})">Delete</button></div></div>`).join(''):'<p class="meta">No tasks found.</p>'}
+async function save(){const b={title:$('title').value,description:$('desc').value,priority:$('pri').value,status:$('sta').value,due_date:$('due').value||null};
+  try{if(editId){const t=await api('/api/tasks/'+editId,'PUT',b);tasks=tasks.map(x=>x.id===editId?{...x,...t}:x);editId=null;$('ft').textContent='Add Task';$('sb').textContent='Add Task'}
+  else tasks.unshift(await api('/api/tasks','POST',b));
+  ['title','desc','due'].forEach(i=>$(i).value='');render()}catch(e){alert(e.message)}}
+function edit(id){const t=tasks.find(x=>x.id===id);editId=id;$('title').value=t.title;$('desc').value=t.description;$('pri').value=t.priority;$('sta').value=t.status;$('due').value=t.due_date||'';
+  $('ft').textContent='Edit Task';$('sb').textContent='Update Task';scrollTo({top:0,behavior:'smooth'})}
+async function setStatus(id,s){const t=await api('/api/tasks/'+id,'PUT',{status:s});tasks=tasks.map(x=>x.id===id?{...x,...t}:x);render()}
+async function del(id){if(!confirm('Delete this task?'))return;await api('/api/tasks/'+id,'DELETE');tasks=tasks.filter(x=>x.id!==id);render()}
+start();
+</script></body></html>
